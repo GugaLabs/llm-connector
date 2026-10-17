@@ -1,14 +1,26 @@
 # Changelog
 
-Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versionamento [SemVer](https://semver.org/lang/pt-BR/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [SemVer](https://semver.org/).
+
+## [0.0.1-beta.1] - 2026-10-17
+
+### Changed
+- English is now the package language: docs, code comments and `LLMError` messages (previously Portuguese). Branch on `error.code`, not on the message.
+- The README is in English, with translations in `README.pt-BR.md` and `README.es.md`.
+
+### Fixed
+- `codex.login({ signal })` now stops right away when the signal is aborted during `onCode`, instead of waiting for authorization.
+
+### Added
+- Broader test suite (15 → 46 tests): SSE parsing, HTTP error mapping, timeouts, model caching, in-stream errors, device-code edge cases and storage tampering.
 
 ## [0.0.1-beta.0] - 2026-10-17
 
-Primeira versão pública (beta).
+First public release (beta).
 
-### Adicionado
-- Cliente unificado `createLLM` com `statuses`, `listModels`, `stream` e `complete`.
-- Provedor **Codex** (assinatura do ChatGPT): login por código, renovação de token com proteção contra renovações simultâneas, catálogo de modelos e streaming.
-- Provedor **Claude API** (Anthropic) e **OpenAI API** (com `baseUrl` para endpoints compatíveis), por chave de API.
-- Armazenamento de credenciais plugável: memória, arquivo criptografado (AES-256-GCM) e adaptador para o `safeStorage` do Electron.
-- Interface `Provider` para novos provedores e erros tipados (`LLMError`).
+### Added
+- Unified `createLLM` client with `statuses`, `listModels`, `stream` and `complete`.
+- **Codex** provider (ChatGPT subscription): device-code sign-in, token refresh protected against concurrent refreshes, model catalog and streaming.
+- **Claude API** (Anthropic) and **OpenAI API** providers (with `baseUrl` for compatible endpoints), using API keys.
+- Pluggable credential storage: memory, encrypted file (AES-256-GCM) and an adapter for Electron's `safeStorage`.
+- `Provider` interface for new providers, and typed errors (`LLMError`).

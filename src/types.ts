@@ -5,7 +5,7 @@ export interface ChatMessage {
   content: string
 }
 
-/** Identificador do provedor. Os embutidos são 'codex', 'anthropic' e 'openai'. */
+/** Provider identifier. Built-in ones are 'codex', 'anthropic' and 'openai'. */
 export type ProviderId = string
 
 export interface ModelInfo {
@@ -15,7 +15,7 @@ export interface ModelInfo {
 }
 
 export interface ModelCatalog {
-  /** 'live' = veio do provedor; 'fallback' = consulta falhou e usamos o modelo padrão. */
+  /** 'live' = fetched from the provider; 'fallback' = lookup failed, so the default model is used. */
   source: 'live' | 'fallback'
   defaultModel: string
   models: ModelInfo[]
@@ -23,7 +23,7 @@ export interface ModelCatalog {
 
 export interface ConnectionStatus {
   connected: boolean
-  /** Texto curto para exibir na UI (e-mail da conta, chave mascarada...). */
+  /** Short text to show in a UI (account e-mail, masked key...). */
   label?: string | null
   email?: string | null
   plan?: string | null
@@ -37,7 +37,7 @@ export interface StreamRequest {
   system?: string
   maxTokens?: number
   temperature?: number
-  /** Permite interromper (botão "Parar"). */
+  /** Lets the caller cancel the request (e.g. a "Stop" button). */
   signal?: AbortSignal
 }
 
@@ -52,7 +52,7 @@ export type StreamEvent =
 
 export type AuthKind = 'oauth-device' | 'api-key'
 
-/** Contrato que todo provedor cumpre; é também o ponto de extensão (ex.: Cursor). */
+/** Contract every provider implements; also the extension point (e.g. Cursor). */
 export interface Provider {
   readonly id: ProviderId
   readonly name: string

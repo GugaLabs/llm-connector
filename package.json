@@ -1,7 +1,7 @@
 {
   "name": "llm-connector",
-  "version": "0.0.1-beta.0",
-  "description": "Conectores para LLMs numa API única: assinatura Codex/ChatGPT, Claude API e OpenAI API, com login, renovação de token, catálogo de modelos e streaming. Versão beta.",
+  "version": "0.0.1-beta.1",
+  "description": "LLM connectors behind a single API: Codex/ChatGPT subscription, Claude API and OpenAI API, with sign-in, token refresh, model catalog and streaming. Beta.",
   "keywords": [
     "llm",
     "codex",
@@ -36,6 +36,8 @@
   "files": [
     "dist",
     "README.md",
+    "README.pt-BR.md",
+    "README.es.md",
     "LICENSE",
     "CHANGELOG.md"
   ],

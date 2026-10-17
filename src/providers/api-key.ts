@@ -9,7 +9,7 @@ export interface StoredApiKey {
 
 export const maskKey = (key: string) => (key.length > 12 ? `${key.slice(0, 7)}…${key.slice(-4)}` : '••••')
 
-/** Base comum dos provedores que usam chave de API. */
+/** Shared base for API-key providers. */
 export abstract class ApiKeyProviderBase {
   protected readonly storage: CredentialStorage
   protected readonly fetchImpl: FetchLike
@@ -36,13 +36,13 @@ export abstract class ApiKeyProviderBase {
 
   protected async requireKey(): Promise<string> {
     const stored = await this.readKey()
-    if (!stored) throw new LLMError('Informe a chave de API deste provedor primeiro.', 'not_connected')
+    if (!stored) throw new LLMError('Set an API key for this provider first.', 'not_connected')
     return stored.apiKey
   }
 
   protected async saveKey(apiKey: string): Promise<ConnectionStatus> {
     const trimmed = apiKey.trim()
-    if (trimmed.length < 8 || /\s/.test(trimmed)) throw new LLMError('A chave de API parece inválida.', 'invalid_request')
+    if (trimmed.length < 8 || /\s/.test(trimmed)) throw new LLMError('The API key looks invalid.', 'invalid_request')
     const stored: StoredApiKey = { apiKey: trimmed, connectedAt: new Date().toISOString() }
     await this.storage.set(this.storageKey, JSON.stringify(stored))
     return { connected: true, label: maskKey(trimmed), connectedAt: stored.connectedAt }

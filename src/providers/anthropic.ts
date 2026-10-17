@@ -7,13 +7,13 @@ const FALLBACK_MODEL = 'claude-sonnet-4-5'
 const MODELS_TTL_MS = 10 * 60 * 1000
 
 export interface AnthropicOptions extends ProviderOptions {
-  /** Modelo usado quando a lista não pode ser consultada. */
+  /** Model used when the model list cannot be fetched. */
   fallbackModel?: string
-  /** `max_tokens` padrão (a API da Anthropic exige o campo). */
+  /** Default `max_tokens` (the Anthropic API requires it). */
   defaultMaxTokens?: number
 }
 
-/** Claude via API da Anthropic (chave de API). */
+/** Claude through the Anthropic API (API key). */
 export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
   readonly id = 'anthropic'
   readonly name = 'Claude API'
@@ -32,14 +32,14 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
     return { 'x-api-key': apiKey, 'anthropic-version': API_VERSION, 'User-Agent': this.userAgent }
   }
 
-  /** Valida a chave com uma consulta barata e, se válida, guarda. */
+  /** Validates the key with a cheap request and stores it if valid. */
   async setApiKey(apiKey: string, { validate = true }: { validate?: boolean } = {}): Promise<ConnectionStatus> {
     const trimmed = apiKey.trim()
     if (validate) {
-      const response = await send(this.fetchImpl, `${this.baseUrl}/v1/models?limit=1`, { headers: this.headers(trimmed), timeout: 15_000 }, 'Não foi possível conectar à Anthropic. Verifique sua internet.')
+      const response = await send(this.fetchImpl, `${this.baseUrl}/v1/models?limit=1`, { headers: this.headers(trimmed), timeout: 15_000 }, 'Could not reach Anthropic. Check your connection.')
       if (!response.ok) {
-        const error = await errorFromResponse(response, 'A Anthropic')
-        throw error.code === 'invalid_credentials' ? new LLMError('A Anthropic recusou esta chave de API.', 'invalid_credentials', error.status) : error
+        const error = await errorFromResponse(response, 'Anthropic')
+        throw error.code === 'invalid_credentials' ? new LLMError('Anthropic rejected this API key.', 'invalid_credentials', error.status) : error
       }
     }
     this.modelsCache = null
@@ -56,8 +56,8 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
     if (!force && this.modelsCache && Date.now() - this.modelsCache.at < MODELS_TTL_MS) return this.modelsCache.value
     let value: ModelCatalog = { source: 'fallback', defaultModel: this.fallbackModel, models: [{ id: this.fallbackModel, label: this.fallbackModel }] }
     try {
-      const response = await send(this.fetchImpl, `${this.baseUrl}/v1/models?limit=100`, { headers: this.headers(apiKey), timeout: 15_000 }, 'rede')
-      if (response.status === 401 || response.status === 403) throw new LLMError('A Anthropic recusou a chave de API.', 'invalid_credentials', response.status)
+      const response = await send(this.fetchImpl, `${this.baseUrl}/v1/models?limit=100`, { headers: this.headers(apiKey), timeout: 15_000 }, 'network')
+      if (response.status === 401 || response.status === 403) throw new LLMError('Anthropic rejected the API key.', 'invalid_credentials', response.status)
       if (response.ok) {
         const data = (await readJson(response)) as { data?: Array<{ id?: string; display_name?: string }> } | null
         const models: ModelInfo[] = (data?.data ?? [])
@@ -73,7 +73,7 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
   }
 
   async *stream(request: StreamRequest): AsyncGenerator<StreamEvent> {
-    if (!request.messages?.length) throw new LLMError('Nenhuma mensagem para enviar.', 'invalid_request')
+    if (!request.messages?.length) throw new LLMError('No messages to send.', 'invalid_request')
     const apiKey = await this.requireKey()
     const model = request.model || (await this.listModels()).defaultModel
     const body: Record<string, unknown> = {
@@ -89,9 +89,9 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
       this.fetchImpl,
       `${this.baseUrl}/v1/messages`,
       { method: 'POST', headers: { ...this.headers(apiKey), 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body), signal: request.signal, timeout: 300_000 },
-      'Não foi possível conectar à Anthropic.',
+      'Could not reach Anthropic.',
     )
-    if (!response.ok) throw await errorFromResponse(response, 'A Anthropic')
+    if (!response.ok) throw await errorFromResponse(response, 'Anthropic')
 
     let text = ''
     const usage: Usage = {}
@@ -108,7 +108,7 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
         usage.outputTokens = event.usage.output_tokens ?? usage.outputTokens
       } else if (event.type === 'error') {
         const kind = event.error?.type
-        throw new LLMError(event.error?.message ?? 'A Anthropic não conseguiu responder.', kind === 'rate_limit_error' || kind === 'overloaded_error' ? 'rate_limited' : 'provider_error')
+        throw new LLMError(event.error?.message ?? 'Anthropic failed to respond.', kind === 'rate_limit_error' || kind === 'overloaded_error' ? 'rate_limited' : 'provider_error')
       }
     }
     yield { type: 'done', text, usage }

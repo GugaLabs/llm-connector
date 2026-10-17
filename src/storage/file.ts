@@ -5,18 +5,18 @@ import { LLMError } from '../types.js'
 import { assertStorageKey, type CredentialStorage } from './types.js'
 
 export interface EncryptedFileStorageOptions {
-  /** Pasta onde os arquivos criptografados ficam (uma por credencial). */
+  /** Folder for the encrypted files (one per credential). */
   dir: string
   /**
-   * Segredo usado para derivar a chave AES-256. Se omitido, geramos uma chave
-   * aleatória em `<dir>/.key` (0600): protege contra leitura casual dos arquivos,
-   * mas não contra quem tem acesso à pasta inteira. Prefira passar um segredo
-   * vindo do Keychain/variável de ambiente do seu app.
+   * Secret used to derive the AES-256 key. If omitted, a random key is created at
+   * `<dir>/.key` (0600): it protects against casual reads of the files, but not
+   * against someone with access to the whole folder. Prefer passing a secret from
+   * your app's keychain or an environment variable.
    */
   secret?: string | Buffer
 }
 
-/** Arquivos `<chave>.enc` com AES-256-GCM. Funciona em qualquer app Node. */
+/** `<key>.enc` files encrypted with AES-256-GCM. Works in any Node app. */
 export function createEncryptedFileStorage(options: EncryptedFileStorageOptions): CredentialStorage {
   let keyPromise: Promise<Buffer> | null = null
 
@@ -55,7 +55,7 @@ export function createEncryptedFileStorage(options: EncryptedFileStorageOptions)
         decipher.setAuthTag(Buffer.from(box.tag, 'base64'))
         return Buffer.concat([decipher.update(Buffer.from(box.data, 'base64')), decipher.final()]).toString('utf8')
       } catch {
-        // Arquivo corrompido ou chave diferente: tratamos como "não conectado".
+        // Corrupted file or different key: treat as "not connected".
         return null
       }
     },
@@ -69,7 +69,7 @@ export function createEncryptedFileStorage(options: EncryptedFileStorageOptions)
         const box = { v: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: data.toString('base64') }
         await writeFile(path, JSON.stringify(box), { mode: 0o600 })
       } catch (error) {
-        throw new LLMError(`Não foi possível gravar a credencial: ${(error as Error).message}`, 'storage')
+        throw new LLMError(`Could not write the credential: ${(error as Error).message}`, 'storage')
       }
     },
     async delete(key) {

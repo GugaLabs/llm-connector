@@ -12,8 +12,8 @@ export interface OpenAIOptions extends ProviderOptions {
 }
 
 /**
- * OpenAI via API (chave). Também serve para endpoints compatíveis com a API da
- * OpenAI: passe `baseUrl` (ex.: um gateway ou servidor local).
+ * OpenAI through the API (API key). Also works with OpenAI-compatible endpoints:
+ * pass `baseUrl` (e.g. a gateway or a local server).
  */
 export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
   readonly id = 'openai'
@@ -34,10 +34,10 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
   async setApiKey(apiKey: string, { validate = true }: { validate?: boolean } = {}): Promise<ConnectionStatus> {
     const trimmed = apiKey.trim()
     if (validate) {
-      const response = await send(this.fetchImpl, `${this.baseUrl}/models`, { headers: this.headers(trimmed), timeout: 15_000 }, 'Não foi possível conectar à OpenAI. Verifique sua internet.')
+      const response = await send(this.fetchImpl, `${this.baseUrl}/models`, { headers: this.headers(trimmed), timeout: 15_000 }, 'Could not reach OpenAI. Check your connection.')
       if (!response.ok) {
-        const error = await errorFromResponse(response, 'A OpenAI')
-        throw error.code === 'invalid_credentials' ? new LLMError('A OpenAI recusou esta chave de API.', 'invalid_credentials', error.status) : error
+        const error = await errorFromResponse(response, 'OpenAI')
+        throw error.code === 'invalid_credentials' ? new LLMError('OpenAI rejected this API key.', 'invalid_credentials', error.status) : error
       }
     }
     this.modelsCache = null
@@ -54,8 +54,8 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
     if (!force && this.modelsCache && Date.now() - this.modelsCache.at < MODELS_TTL_MS) return this.modelsCache.value
     let value: ModelCatalog = { source: 'fallback', defaultModel: this.fallbackModel, models: [{ id: this.fallbackModel, label: this.fallbackModel }] }
     try {
-      const response = await send(this.fetchImpl, `${this.baseUrl}/models`, { headers: this.headers(apiKey), timeout: 15_000 }, 'rede')
-      if (response.status === 401 || response.status === 403) throw new LLMError('A OpenAI recusou a chave de API.', 'invalid_credentials', response.status)
+      const response = await send(this.fetchImpl, `${this.baseUrl}/models`, { headers: this.headers(apiKey), timeout: 15_000 }, 'network')
+      if (response.status === 401 || response.status === 403) throw new LLMError('OpenAI rejected the API key.', 'invalid_credentials', response.status)
       if (response.ok) {
         const data = (await readJson(response)) as { data?: Array<{ id?: string }> } | null
         const models: ModelInfo[] = (data?.data ?? [])
@@ -75,7 +75,7 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
   }
 
   async *stream(request: StreamRequest): AsyncGenerator<StreamEvent> {
-    if (!request.messages?.length) throw new LLMError('Nenhuma mensagem para enviar.', 'invalid_request')
+    if (!request.messages?.length) throw new LLMError('No messages to send.', 'invalid_request')
     const apiKey = await this.requireKey()
     const model = request.model || (await this.listModels()).defaultModel
     const messages = [
@@ -90,9 +90,9 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
       this.fetchImpl,
       `${this.baseUrl}/chat/completions`,
       { method: 'POST', headers: { ...this.headers(apiKey), 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body), signal: request.signal, timeout: 300_000 },
-      'Não foi possível conectar à OpenAI.',
+      'Could not reach OpenAI.',
     )
-    if (!response.ok) throw await errorFromResponse(response, 'A OpenAI')
+    if (!response.ok) throw await errorFromResponse(response, 'OpenAI')
 
     let text = ''
     let usage: Usage | undefined
@@ -100,7 +100,7 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
       if (sse.data === '[DONE]') break
       const event = parseJsonSafe(sse.data)
       if (!event) continue
-      if (event.error) throw new LLMError(event.error.message ?? 'A OpenAI não conseguiu responder.', 'provider_error')
+      if (event.error) throw new LLMError(event.error.message ?? 'OpenAI failed to respond.', 'provider_error')
       const delta = event.choices?.[0]?.delta?.content
       if (typeof delta === 'string' && delta) {
         text += delta

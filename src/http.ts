@@ -3,19 +3,19 @@ import { LLMError, type LLMErrorCode } from './types.js'
 export type FetchLike = typeof fetch
 
 export interface ProviderOptions {
-  /** Onde guardar tokens/chaves. Obrigatório. */
+  /** Where tokens/keys are stored. Required. */
   storage: import('./storage/types.js').CredentialStorage
-  /** Troca o `fetch` (testes, proxies). Padrão: o global. */
+  /** Replaces `fetch` (tests, proxies). Defaults to the global one. */
   fetch?: FetchLike
-  /** Identificação enviada no User-Agent. */
+  /** Value sent in the User-Agent header. */
   userAgent?: string
-  /** Muda a URL base do provedor (gateways, endpoints compatíveis). */
+  /** Overrides the provider base URL (gateways, compatible endpoints). */
   baseUrl?: string
 }
 
 export const DEFAULT_USER_AGENT = 'llm-connector/0.1'
 
-/** fetch com timeout e erro de rede traduzido para LLMError. */
+/** fetch with a timeout, mapping network failures to LLMError. */
 export async function send(
   fetchImpl: FetchLike,
   url: string,
@@ -27,8 +27,8 @@ export async function send(
   try {
     return await fetchImpl(url, { ...rest, signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal })
   } catch (error) {
-    if (signal?.aborted) throw new LLMError('Requisição cancelada.', 'aborted')
-    if (timeoutSignal.aborted) throw new LLMError('A requisição demorou demais e foi interrompida.', 'network')
+    if (signal?.aborted) throw new LLMError('Request aborted.', 'aborted')
+    if (timeoutSignal.aborted) throw new LLMError('The request timed out.', 'network')
     void error
     throw new LLMError(networkMessage, 'network')
   }
@@ -53,18 +53,18 @@ function pickMessage(data: unknown): string | null {
   return typeof record?.message === 'string' ? record.message : null
 }
 
-/** Converte uma resposta HTTP de erro em LLMError com código estável. */
+/** Converts an HTTP error response into an LLMError with a stable code. */
 export async function errorFromResponse(response: Response, providerName: string): Promise<LLMError> {
   const detail = pickMessage(await readJson(response))
   const status = response.status
   let code: LLMErrorCode = 'provider_error'
-  let message = `${providerName} retornou um erro (status ${status}).`
+  let message = `${providerName} returned an error (status ${status}).`
   if (status === 401 || status === 403) {
     code = 'invalid_credentials'
-    message = `${providerName} recusou as credenciais.`
+    message = `${providerName} rejected the credentials.`
   } else if (status === 429) {
     code = 'rate_limited'
-    message = `Limite de uso do ${providerName} atingido. Tente mais tarde.`
+    message = `${providerName} rate limit reached. Try again later.`
   } else if (status === 400 || status === 404 || status === 422) {
     code = 'invalid_request'
     message = detail ? `${providerName}: ${detail}` : message
@@ -79,7 +79,7 @@ export interface SseEvent {
   data: string
 }
 
-/** Lê um corpo `text/event-stream` e emite um evento por bloco. */
+/** Reads a `text/event-stream` body and yields one event per block. */
 export async function* sseEvents(body: ReadableStream<Uint8Array> | null): AsyncGenerator<SseEvent> {
   if (!body) return
   const decoder = new TextDecoder()

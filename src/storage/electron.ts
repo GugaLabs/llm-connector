@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { LLMError } from '../types.js'
 import { assertStorageKey, type CredentialStorage } from './types.js'
 
-/** Parte do `safeStorage` do Electron que usamos (tipo estrutural: não dependemos do Electron). */
+/** The subset of Electron's `safeStorage` we use (structural type: no Electron dependency). */
 export interface SafeStorageLike {
   isEncryptionAvailable(): boolean
   encryptString(plain: string): Buffer
@@ -11,8 +11,8 @@ export interface SafeStorageLike {
 }
 
 /**
- * Criptografa com o Keychain (macOS), DPAPI (Windows) ou libsecret (Linux) via
- * `safeStorage` do Electron. Use no processo principal:
+ * Encrypts with Keychain (macOS), DPAPI (Windows) or libsecret (Linux) through
+ * Electron's `safeStorage`. Use it in the main process:
  *
  *   createSafeStorageStorage({ safeStorage, dir: path.join(app.getPath('userData'), 'llm') })
  */
@@ -33,7 +33,7 @@ export function createSafeStorageStorage(options: { safeStorage: SafeStorageLike
     },
     async set(key, value) {
       if (!safeStorage.isEncryptionAvailable()) {
-        throw new LLMError('O armazenamento seguro do sistema não está disponível; não é seguro guardar a credencial.', 'storage')
+        throw new LLMError('OS secure storage is unavailable; refusing to store the credential.', 'storage')
       }
       await mkdir(dir, { recursive: true })
       await writeFile(filePath(key), safeStorage.encryptString(value), { mode: 0o600 })

@@ -1,6 +1,6 @@
 import type { CredentialStorage } from './types.js'
 
-/** Guarda tudo só na memória do processo. Bom para testes e sessões efêmeras. */
+/** Keeps everything in process memory. Good for tests and short-lived sessions. */
 export function createMemoryStorage(initial: Record<string, string> = {}): CredentialStorage {
   const data = new Map(Object.entries(initial))
   return {

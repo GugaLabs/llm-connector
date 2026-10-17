@@ -4,8 +4,8 @@ import type { CredentialStorage } from '../storage/types.js'
 import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest } from '../types.js'
 
 /*
- * Login com a assinatura do ChatGPT/Codex (OAuth device code), o mesmo fluxo do
- * Codex CLI. Não usa chave de API: o uso entra no plano do ChatGPT do usuário.
+ * Sign-in with a ChatGPT/Codex subscription (OAuth device code), the same flow as
+ * the Codex CLI. No API key: usage counts against the user's ChatGPT plan.
  */
 const ISSUER = 'https://auth.openai.com'
 const DEFAULT_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
@@ -21,7 +21,7 @@ const STORAGE_KEY = 'codex'
 export interface CodexOptions extends ProviderOptions {
   clientId?: string
   defaultModel?: string
-  /** Versão informada ao catálogo de modelos do Codex. */
+  /** Version reported to the Codex model catalog. */
   clientVersion?: string
 }
 
@@ -41,9 +41,9 @@ export interface LoginFlow {
   flowId: string
   userCode: string
   verificationUri: string
-  /** Segundos entre consultas. */
+  /** Seconds between polls. */
   interval: number
-  /** Segundos até o código expirar. */
+  /** Seconds until the code expires. */
   expiresIn: number
 }
 
@@ -87,10 +87,10 @@ const toPublic = (c: StoredCodex): ConnectionStatus => ({
   expiresAt: new Date(c.expiresAt).toISOString(),
 })
 
-/** Codex via assinatura do ChatGPT (login por código no navegador). */
+/** Codex through a ChatGPT subscription (device-code sign-in in the browser). */
 export class CodexProvider implements Provider {
   readonly id = 'codex'
-  readonly name = 'Codex (assinatura ChatGPT)'
+  readonly name = 'Codex (ChatGPT subscription)'
   readonly auth = 'oauth-device' as const
 
   private readonly storage: CredentialStorage
@@ -114,7 +114,7 @@ export class CodexProvider implements Provider {
     this.clientVersion = options.clientVersion ?? '1.0.0'
   }
 
-  // ---- armazenamento -------------------------------------------------------
+  // ---- storage ------------------------------------------------------------
 
   private async read(): Promise<StoredCodex | null> {
     const raw = await this.storage.get(STORAGE_KEY)
@@ -125,7 +125,7 @@ export class CodexProvider implements Provider {
 
   private toStored(tokens: any, previous?: StoredCodex | null): StoredCodex {
     const refreshToken = tokens?.refresh_token ?? previous?.refreshToken
-    if (!tokens?.access_token || !refreshToken) throw new LLMError('A OpenAI retornou uma resposta de login incompleta.', 'provider_error')
+    if (!tokens?.access_token || !refreshToken) throw new LLMError('OpenAI returned an incomplete sign-in response.', 'provider_error')
     const details = describeTokens(tokens)
     return {
       accessToken: tokens.access_token,
@@ -150,41 +150,41 @@ export class CodexProvider implements Provider {
         headers: { 'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json', Accept: 'application/json', 'User-Agent': this.userAgent },
         body: form ? new URLSearchParams(body).toString() : JSON.stringify(body),
       },
-      'Não foi possível conectar à OpenAI. Verifique sua internet e tente novamente.',
+      'Could not reach OpenAI. Check your connection and try again.',
     )
     return { status: response.status, ok: response.ok, data: (await readJson(response)) as any }
   }
 
-  // ---- login (device code) -------------------------------------------------
+  // ---- sign-in (device code) ----------------------------------------------
 
-  /** Passo 1: pede o código. Mostre `userCode` ao usuário e abra `verificationUri`. */
+  /** Step 1: request a code. Show `userCode` to the user and open `verificationUri`. */
   async startLogin(): Promise<LoginFlow> {
     this.flows.clear()
     const { status, data } = await this.post(`${ISSUER}/api/accounts/deviceauth/usercode`, { client_id: this.clientId })
-    if (status === 404) throw new LLMError('O login por código não está habilitado para esta conta ou organização.', 'provider_error', status)
-    if (status === 429) throw new LLMError('Muitas tentativas. Aguarde um instante e tente de novo.', 'rate_limited', status)
+    if (status === 404) throw new LLMError('Device-code sign-in is not enabled for this account or organization.', 'provider_error', status)
+    if (status === 429) throw new LLMError('Too many attempts. Wait a moment and try again.', 'rate_limited', status)
     const userCode = data?.user_code ?? data?.usercode
-    if (status !== 200 || !data?.device_auth_id || !userCode) throw new LLMError(`Não foi possível iniciar o login (status ${status}).`, 'provider_error', status)
+    if (status !== 200 || !data?.device_auth_id || !userCode) throw new LLMError(`Could not start sign-in (status ${status}).`, 'provider_error', status)
     const flowId = randomUUID()
     const interval = Math.max(3, Number.parseInt(data.interval, 10) || 5)
     this.flows.set(flowId, { deviceAuthId: data.device_auth_id, userCode, interval, expiresAt: Date.now() + LOGIN_TIMEOUT_MS })
     return { flowId, userCode, verificationUri: VERIFICATION_URI, interval, expiresIn: LOGIN_TIMEOUT_MS / 1000 }
   }
 
-  /** Passo 2: consulta uma vez. Repita a cada `interval` segundos até `connected`. */
+  /** Step 2: poll once. Repeat every `interval` seconds until `connected`. */
   async pollLogin(flowId: string): Promise<LoginPoll> {
     const flow = this.flows.get(flowId)
-    if (!flow) throw new LLMError('Este login expirou ou foi cancelado. Comece novamente.', 'flow_expired')
+    if (!flow) throw new LLMError('This sign-in expired or was cancelled. Start again.', 'flow_expired')
     if (Date.now() > flow.expiresAt) {
       this.flows.delete(flowId)
-      throw new LLMError('O código expirou. Comece novamente.', 'flow_expired')
+      throw new LLMError('The code expired. Start again.', 'flow_expired')
     }
     const poll = await this.post(`${ISSUER}/api/accounts/deviceauth/token`, { device_auth_id: flow.deviceAuthId, user_code: flow.userCode })
     if (poll.status === 403 || poll.status === 404) return { status: 'pending', interval: flow.interval }
     if (poll.status === 429) return { status: 'pending', interval: flow.interval + 5 }
     if (poll.status !== 200 || !poll.data?.authorization_code || !poll.data?.code_verifier) {
       this.flows.delete(flowId)
-      throw new LLMError(`A autorização falhou (status ${poll.status}).`, 'provider_error', poll.status)
+      throw new LLMError(`Authorization failed (status ${poll.status}).`, 'provider_error', poll.status)
     }
     const exchange = await this.post(
       `${ISSUER}/oauth/token`,
@@ -192,7 +192,7 @@ export class CodexProvider implements Provider {
       true,
     )
     this.flows.delete(flowId)
-    if (!exchange.ok) throw new LLMError(`Não foi possível concluir o login (status ${exchange.status}).`, 'provider_error', exchange.status)
+    if (!exchange.ok) throw new LLMError(`Could not complete sign-in (status ${exchange.status}).`, 'provider_error', exchange.status)
     const stored = this.toStored(exchange.data)
     await this.storage.set(STORAGE_KEY, JSON.stringify(stored))
     this.modelsCache = null
@@ -204,8 +204,8 @@ export class CodexProvider implements Provider {
   }
 
   /**
-   * Atalho que faz os dois passos: chama `onCode` com o código (para a UI
-   * mostrar/abrir o navegador) e espera a autorização.
+   * Shortcut for both steps: calls `onCode` with the code (so the UI can show it
+   * or open the browser) and waits for authorization.
    */
   async login(options: { onCode?: (flow: LoginFlow) => void | Promise<void>; signal?: AbortSignal } = {}): Promise<ConnectionStatus> {
     const flow = await this.startLogin()
@@ -214,8 +214,10 @@ export class CodexProvider implements Provider {
     try {
       for (;;) {
         await new Promise<void>((resolve, reject) => {
+          const abort = () => { clearTimeout(timer); reject(new LLMError('Sign-in cancelled.', 'aborted')) }
           const timer = setTimeout(resolve, interval * 1000)
-          options.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new LLMError('Login cancelado.', 'aborted')) }, { once: true })
+          if (options.signal?.aborted) return abort()
+          options.signal?.addEventListener('abort', abort, { once: true })
         })
         const result = await this.pollLogin(flow.flowId)
         if (result.status === 'connected') {
@@ -229,7 +231,7 @@ export class CodexProvider implements Provider {
     }
   }
 
-  // ---- sessão --------------------------------------------------------------
+  // ---- session -------------------------------------------------------------
 
   async status(): Promise<ConnectionStatus> {
     const stored = await this.read()
@@ -241,21 +243,21 @@ export class CodexProvider implements Provider {
     await this.storage.delete(STORAGE_KEY)
   }
 
-  /** Confere (e renova, se preciso) a sessão. */
+  /** Checks the session, refreshing it if needed. */
   async test(): Promise<ConnectionStatus> {
     return toPublic(await this.freshCredentials())
   }
 
   private async refresh(credentials: StoredCodex): Promise<StoredCodex> {
     const result = await this.post(`${ISSUER}/oauth/token`, { grant_type: 'refresh_token', refresh_token: credentials.refreshToken, client_id: this.clientId }, true)
-    if (result.status === 429) throw new LLMError('A OpenAI limitou temporariamente a renovação. Tente em instantes.', 'rate_limited', 429)
+    if (result.status === 429) throw new LLMError('OpenAI is temporarily rate limiting token refresh. Try again shortly.', 'rate_limited', 429)
     if (!result.ok) {
       const code = result.data?.error?.code ?? result.data?.error
       if ([400, 401, 403].includes(result.status) || code === 'invalid_grant') {
         await this.storage.delete(STORAGE_KEY)
-        throw new LLMError('Sua sessão do ChatGPT expirou. Entre novamente.', 'reauth_required', result.status)
+        throw new LLMError('Your ChatGPT session expired. Sign in again.', 'reauth_required', result.status)
       }
-      throw new LLMError(`Não foi possível renovar o login (status ${result.status}).`, 'provider_error', result.status)
+      throw new LLMError(`Could not refresh the session (status ${result.status}).`, 'provider_error', result.status)
     }
     const next = this.toStored(result.data, credentials)
     await this.storage.set(STORAGE_KEY, JSON.stringify(next))
@@ -264,9 +266,9 @@ export class CodexProvider implements Provider {
 
   private async freshCredentials(): Promise<StoredCodex> {
     const credentials = await this.read()
-    if (!credentials) throw new LLMError('Conecte sua assinatura do ChatGPT/Codex primeiro.', 'not_connected')
+    if (!credentials) throw new LLMError('Connect your ChatGPT/Codex subscription first.', 'not_connected')
     if (credentials.expiresAt - Date.now() > REFRESH_SKEW_MS) return credentials
-    // O refresh token é rotativo: nunca renove duas vezes ao mesmo tempo.
+    // Refresh tokens rotate: never refresh twice at the same time.
     this.refreshing ??= this.refresh(credentials).finally(() => { this.refreshing = null })
     return this.refreshing
   }
@@ -278,7 +280,7 @@ export class CodexProvider implements Provider {
     return headers
   }
 
-  // ---- modelos -------------------------------------------------------------
+  // ---- models --------------------------------------------------------------
 
   async listModels({ force = false }: { force?: boolean } = {}): Promise<ModelCatalog> {
     const credentials = await this.freshCredentials()
@@ -287,8 +289,8 @@ export class CodexProvider implements Provider {
     }
     let value: ModelCatalog = { source: 'fallback', defaultModel: this.defaultModel, models: [{ id: this.defaultModel, label: this.defaultModel }] }
     try {
-      const response = await send(this.fetchImpl, `${this.baseUrl}/models?client_version=${encodeURIComponent(this.clientVersion)}`, { headers: { ...this.authHeaders(credentials), Accept: 'application/json' }, timeout: 15_000 }, 'rede')
-      if (response.status === 401) throw new LLMError('O Codex recusou o login. Entre novamente.', 'reauth_required', 401)
+      const response = await send(this.fetchImpl, `${this.baseUrl}/models?client_version=${encodeURIComponent(this.clientVersion)}`, { headers: { ...this.authHeaders(credentials), Accept: 'application/json' }, timeout: 15_000 }, 'network')
+      if (response.status === 401) throw new LLMError('Codex rejected the session. Sign in again.', 'reauth_required', 401)
       if (response.ok) {
         const models = parseModels(await readJson(response))
         if (models.length > 0) value = { source: 'live', defaultModel: models.some((m) => m.id === this.defaultModel) ? this.defaultModel : models[0]!.id, models }
@@ -300,10 +302,10 @@ export class CodexProvider implements Provider {
     return value
   }
 
-  // ---- inferência ----------------------------------------------------------
+  // ---- inference -----------------------------------------------------------
 
   async *stream(request: StreamRequest): AsyncGenerator<StreamEvent> {
-    if (!request.messages?.length) throw new LLMError('Nenhuma mensagem para enviar.', 'invalid_request')
+    if (!request.messages?.length) throw new LLMError('No messages to send.', 'invalid_request')
     const credentials = await this.freshCredentials()
     const response = await send(
       this.fetchImpl,
@@ -328,10 +330,10 @@ export class CodexProvider implements Provider {
         signal: request.signal,
         timeout: 300_000,
       },
-      'Não foi possível conectar ao Codex.',
+      'Could not reach Codex.',
     )
-    if (response.status === 401) throw new LLMError('O Codex recusou o login. Entre novamente.', 'reauth_required', 401)
-    if (!response.ok) throw await errorFromResponse(response, 'O Codex')
+    if (response.status === 401) throw new LLMError('Codex rejected the session. Sign in again.', 'reauth_required', 401)
+    if (!response.ok) throw await errorFromResponse(response, 'Codex')
 
     let text = ''
     for await (const sse of sseEvents(response.body)) {
@@ -341,7 +343,7 @@ export class CodexProvider implements Provider {
         text += event.delta
         yield { type: 'delta', text: event.delta }
       } else if (event.type === 'response.failed' || event.type === 'error') {
-        throw new LLMError(event.response?.error?.message ?? event.message ?? 'O Codex não conseguiu responder.', 'provider_error')
+        throw new LLMError(event.response?.error?.message ?? event.message ?? 'Codex failed to respond.', 'provider_error')
       } else if (event.type === 'response.completed') {
         const u = event.response?.usage
         yield { type: 'done', text, usage: u ? { inputTokens: u.input_tokens, outputTokens: u.output_tokens } : undefined }

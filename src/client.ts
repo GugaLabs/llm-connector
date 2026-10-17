@@ -6,15 +6,15 @@ import type { CredentialStorage } from './storage/types.js'
 import { LLMError, type ConnectionStatus, type ModelCatalog, type Provider, type ProviderId, type StreamEvent, type StreamRequest } from './types.js'
 
 export interface CreateLLMOptions {
-  /** Onde guardar tokens/chaves (veja `createSafeStorageStorage`, `createEncryptedFileStorage`). */
+  /** Where tokens/keys are stored (see `createSafeStorageStorage`, `createEncryptedFileStorage`). */
   storage: CredentialStorage
   fetch?: FetchLike
   userAgent?: string
-  /** Ajustes por provedor (URL base, modelo padrão, client id...). */
+  /** Per-provider settings (base URL, default model, client id...). */
   codex?: Omit<CodexOptions, 'storage'>
   anthropic?: Omit<AnthropicOptions, 'storage'>
   openai?: Omit<OpenAIOptions, 'storage'>
-  /** Provedores extras (ex.: um conector do Cursor) que seguem a interface `Provider`. */
+  /** Extra providers (e.g. a Cursor connector) implementing the `Provider` interface. */
   extraProviders?: Provider[]
 }
 
@@ -22,16 +22,16 @@ export interface LLM {
   readonly codex: CodexProvider
   readonly anthropic: AnthropicProvider
   readonly openai: OpenAIProvider
-  /** Todos os provedores registrados. */
+  /** All registered providers. */
   readonly providers: Provider[]
   provider(id: ProviderId): Provider
   register(provider: Provider): void
-  /** Estado de conexão de todos os provedores, por id. */
+  /** Connection status of every provider, keyed by id. */
   statuses(): Promise<Record<ProviderId, ConnectionStatus>>
   listModels(id: ProviderId, options?: { force?: boolean }): Promise<ModelCatalog>
   /** Streaming: `for await (const ev of llm.stream('codex', {...}))`. */
   stream(id: ProviderId, request: StreamRequest): AsyncGenerator<StreamEvent>
-  /** Resposta completa em texto. `onDelta` recebe cada pedaço. */
+  /** Full text response. `onDelta` receives each chunk. */
   complete(id: ProviderId, request: StreamRequest, onDelta?: (text: string) => void): Promise<string>
 }
 
@@ -45,7 +45,7 @@ export function createLLM(options: CreateLLMOptions): LLM {
 
   const get = (id: ProviderId): Provider => {
     const found = registry.get(id)
-    if (!found) throw new LLMError(`Provedor desconhecido: ${id}`, 'invalid_request')
+    if (!found) throw new LLMError(`Unknown provider: ${id}`, 'invalid_request')
     return found
   }
 

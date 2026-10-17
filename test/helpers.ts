@@ -8,7 +8,7 @@ export function sse(lines: Array<string | { event?: string; data: unknown }>, st
     .map((l) => (typeof l === 'string' ? `data: ${l}\n\n` : `${l.event ? `event: ${l.event}\n` : ''}data: ${JSON.stringify(l.data)}\n\n`))
     .join('')
   const bytes = new TextEncoder().encode(text)
-  // Quebra em pedaços pequenos para exercitar o parser de SSE.
+  // Split into small chunks to exercise the SSE parser.
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       for (let i = 0; i < bytes.length; i += 7) controller.enqueue(bytes.slice(i, i + 7))
@@ -27,7 +27,7 @@ export function mockFetch(routes: Route[]) {
       const res = await route(url, init)
       if (res) return res
     }
-    return json({ error: { message: `sem rota para ${url}` } }, 599)
+    return json({ error: { message: `no route for ${url}` } }, 599)
   }) as typeof fetch
   return { fetch: impl, calls }
 }
