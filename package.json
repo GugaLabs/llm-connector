@@ -1,0 +1,60 @@
+{
+  "name": "llm-connector",
+  "version": "0.0.1-beta.0",
+  "description": "Conectores para LLMs numa API única: assinatura Codex/ChatGPT, Claude API e OpenAI API, com login, renovação de token, catálogo de modelos e streaming. Versão beta.",
+  "keywords": [
+    "llm",
+    "codex",
+    "chatgpt",
+    "claude",
+    "anthropic",
+    "openai",
+    "oauth",
+    "streaming",
+    "electron",
+    "ai"
+  ],
+  "author": "Gabriel Donato",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GugaLabs/llm-connector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GugaLabs/llm-connector/issues"
+  },
+  "homepage": "https://github.com/GugaLabs/llm-connector#readme",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
