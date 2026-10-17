@@ -4,4 +4,5 @@ export { AnthropicProvider, type AnthropicOptions } from './providers/anthropic.
 export { OpenAIProvider, type OpenAIOptions } from './providers/openai.js'
 export * from './storage/index.js'
 export * from './types.js'
+export { pacing, parseAnthropicRateLimits, parseCodexUsage, parseOpenAIRateLimits, windowLabel, type Pace, type Pacing } from './usage.js'
 export { sseEvents, type FetchLike, type ProviderOptions } from './http.js'

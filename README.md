@@ -14,11 +14,11 @@ Ready-made LLM connectors behind a single API. Install the library, choose where
 credentials are stored, and call `login`, `listModels` and `stream`. You don't have to
 rewrite OAuth, token refresh, streaming parsers or model catalogs in every project.
 
-| Provider | Id | Authentication | Status |
-| --- | --- | --- | --- |
-| Codex (ChatGPT subscription) | `codex` | Device-code sign-in in the browser (OAuth); usage counts against the ChatGPT plan | Reference (validated in a real app) |
-| Claude API | `anthropic` | API key | Experimental (mocked tests only) |
-| OpenAI API | `openai` | API key (accepts `baseUrl` for compatible endpoints) | Experimental (mocked tests only) |
+| Provider | Id | Authentication | Usage limits | Status |
+| --- | --- | --- | --- | --- |
+| Codex (ChatGPT subscription) | `codex` | Device-code sign-in in the browser (OAuth); usage counts against the ChatGPT plan | 5h and weekly windows, credits (live) | Reference (validated in a real app) |
+| Claude API | `anthropic` | API key | Requests/tokens per minute (from response headers) | Experimental (mocked tests only) |
+| OpenAI API | `openai` | API key (accepts `baseUrl` for compatible endpoints) | Requests/tokens per minute (from response headers) | Experimental (mocked tests only) |
 
 You can add other providers (e.g. Cursor) by implementing the `Provider` interface
 and passing them in `extraProviders` or `llm.register(...)`.
@@ -95,10 +95,39 @@ llm.codex.cancelLogin(flow.flowId)               // if the user closes the dialo
 Tokens refresh automatically, one refresh at a time, because the refresh token rotates.
 If the session is revoked, the library deletes the credentials and throws `reauth_required`.
 
+## Usage limits
+
+`llm.usage(id)` returns how much of each limit is used, in one shape for every provider, so you can
+draw progress bars or warn before a limit is hit. `llm.usages()` does it for every connected provider.
+
+```ts
+import { pacing } from 'llm-connector'
+
+const usage = await llm.usage('codex')
+// { provider: 'codex', source: 'live', plan: 'plus', limitReached: false,
+//   windows: [{ id: 'primary', label: '5h', usedPercent: 42, windowSeconds: 18000, resetsAt: '...' },
+//             { id: 'secondary', label: 'weekly', usedPercent: 7.5, ... }],
+//   credits: { balance: '12.50', hasCredits: true, unlimited: false } }
+
+for (const w of usage?.windows ?? []) {
+  const pace = pacing(w) // { elapsedPercent, delta, pace: 'ahead' | 'on_track' | 'under' } | null
+  console.log(`${w.label}: ${w.usedPercent}% used`, pace?.pace === 'ahead' ? '(will run out before reset)' : '')
+}
+```
+
+Where the numbers come from:
+
+- **Codex**: queried live from the ChatGPT usage endpoint with the session you already signed in with (no extra login). The endpoint is undocumented and may change; override it with `codex: { usageUrl }`.
+- **Claude API / OpenAI API**: these APIs have no usage endpoint for regular keys, but every response carries rate-limit headers. The library keeps the latest ones, including from `429` responses, so `usage()` is `null` until the first request. `source` is `'headers'` and windows include `limit` and `remaining`.
+- **Custom providers**: implement the optional `usage()` method of `Provider`.
+
+`pacing(window)` compares the used share with the elapsed share of the window: `'ahead'` means you are on course
+to hit the limit before it resets. It needs `windowSeconds` and `resetsAt`, so it returns `null` for header-based limits.
+
 ## API
 
 - `createLLM({ storage, fetch?, userAgent?, codex?, anthropic?, openai?, extraProviders? })`
-- `llm.statuses()` · `llm.listModels(id, { force? })` · `llm.stream(id, req)` · `llm.complete(id, req, onDelta?)`
+- `llm.statuses()` · `llm.usage(id)` · `llm.usages()` · `llm.listModels(id, { force? })` · `llm.stream(id, req)` · `llm.complete(id, req, onDelta?)`
 - `llm.provider(id)` · `llm.register(provider)` · `llm.providers`
 - `req`: `{ model?, messages, system?, maxTokens?, temperature?, signal? }`. `signal` lets you cancel, e.g. from a "Stop" button.
 - Events: `{ type: 'delta', text }` while streaming, then `{ type: 'done', text, usage? }`.
@@ -136,6 +165,11 @@ npm run build
 This is an independent project with **no affiliation** with OpenAI or Anthropic. The Codex sign-in follows the
 Codex CLI flow, which is internal to OpenAI and may change or stop working at any time. Use it at your own risk
 and follow each service's terms of use.
+
+## Credits
+
+The Codex usage mapping and the pacing idea come from [ai-usagebar](https://github.com/akitaonrails/ai-usagebar)
+by Fabio Akita (MIT), a status-bar app that tracks AI usage limits across many providers.
 
 ## Contributing
 

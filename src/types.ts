@@ -50,6 +50,34 @@ export type StreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'done'; text: string; usage?: Usage }
 
+export interface UsageWindow {
+  /** Stable id: 'primary'/'secondary' (Codex), 'requests'/'tokens' (API keys), or prefixed for named limits. */
+  id: string
+  /** Short display label: '5h', 'weekly', 'requests', 'tokens'... */
+  label: string
+  /** How much of the limit is used, 0-100. */
+  usedPercent: number
+  /** Absolute numbers, when the provider reports them (API-key rate limits). */
+  limit?: number
+  remaining?: number
+  /** Window length, when known. Needed for `pacing()`. */
+  windowSeconds?: number
+  /** ISO date when the window resets. */
+  resetsAt?: string
+}
+
+export interface UsageSnapshot {
+  provider: ProviderId
+  /** 'live' = queried from a usage endpoint; 'headers' = read from the last API response. */
+  source: 'live' | 'headers'
+  fetchedAt: string
+  plan?: string | null
+  /** True when any window is exhausted. */
+  limitReached?: boolean
+  windows: UsageWindow[]
+  credits?: { balance: string | null; hasCredits: boolean; unlimited: boolean }
+}
+
 export type AuthKind = 'oauth-device' | 'api-key'
 
 /** Contract every provider implements; also the extension point (e.g. Cursor). */
@@ -61,6 +89,8 @@ export interface Provider {
   disconnect(): Promise<void>
   listModels(options?: { force?: boolean }): Promise<ModelCatalog>
   stream(request: StreamRequest): AsyncIterable<StreamEvent>
+  /** Current usage limits, or null when nothing is known yet. Optional for custom providers. */
+  usage?(): Promise<UsageSnapshot | null>
 }
 
 export type LLMErrorCode =

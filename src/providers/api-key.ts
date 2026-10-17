@@ -1,6 +1,6 @@
 import { DEFAULT_USER_AGENT, type FetchLike, type ProviderOptions } from '../http.js'
 import type { CredentialStorage } from '../storage/types.js'
-import { LLMError, type ConnectionStatus } from '../types.js'
+import { LLMError, type ConnectionStatus, type UsageSnapshot } from '../types.js'
 
 export interface StoredApiKey {
   apiKey: string
@@ -15,6 +15,7 @@ export abstract class ApiKeyProviderBase {
   protected readonly fetchImpl: FetchLike
   protected readonly userAgent: string
   protected readonly baseUrl: string
+  private lastUsage: UsageSnapshot | null = null
 
   constructor(options: ProviderOptions, defaultBaseUrl: string, private readonly storageKey: string) {
     this.storage = options.storage
@@ -54,6 +55,23 @@ export abstract class ApiKeyProviderBase {
   }
 
   async disconnect(): Promise<void> {
+    this.lastUsage = null
     await this.storage.delete(this.storageKey)
+  }
+
+  /** Reads this provider's rate-limit headers from a response. */
+  protected abstract parseRateLimits(headers: Headers): UsageSnapshot | null
+
+  /** Keeps the rate limits a response reported, if any. */
+  protected recordRateLimits(response: Response): void {
+    this.lastUsage = this.parseRateLimits(response.headers) ?? this.lastUsage
+  }
+
+  /**
+   * Rate limits from the most recent API response (these APIs have no usage
+   * endpoint for regular keys). Null until a request has been made.
+   */
+  async usage(): Promise<UsageSnapshot | null> {
+    return this.lastUsage
   }
 }

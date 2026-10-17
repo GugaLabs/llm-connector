@@ -12,7 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `codex.login({ signal })` now stops right away when the signal is aborted during `onCode`, instead of waiting for authorization.
 
 ### Added
-- Broader test suite (15 → 46 tests): SSE parsing, HTTP error mapping, timeouts, model caching, in-stream errors, device-code edge cases and storage tampering.
+- Usage limits: `llm.usage(id)`, `llm.usages()` and a shared `UsageSnapshot` shape. Codex reads the 5h and weekly windows plus credits from the ChatGPT usage endpoint; Claude API and OpenAI API keep the rate limits from the latest response headers (including `429`s). Custom providers can implement the optional `Provider.usage()`.
+- `pacing(window)` helper that tells whether usage is ahead of, on track with or under the elapsed time.
+- Credits to [ai-usagebar](https://github.com/akitaonrails/ai-usagebar) (MIT), source of the Codex usage mapping and the pacing idea.
+- Broader test suite (15 → 59 tests): SSE parsing, HTTP error mapping, timeouts, model caching, in-stream errors, device-code edge cases, storage tampering and usage limits.
 
 ## [0.0.1-beta.0] - 2026-10-17
 

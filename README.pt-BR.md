@@ -16,11 +16,11 @@ Conectores prontos para LLMs, numa API única. Você instala a lib, escolhe onde
 guardar as credenciais e usa `login`, `listModels` e `stream`. Não precisa reescrever
 OAuth, renovação de token, parser de streaming ou catálogo de modelos em cada projeto.
 
-| Provedor | Id | Autenticação | Estado |
-| --- | --- | --- | --- |
-| Codex (assinatura ChatGPT) | `codex` | Login por código no navegador (OAuth); o uso entra no plano do ChatGPT | Referência (validado num app real) |
-| Claude API | `anthropic` | Chave de API | Experimental (só testes simulados) |
-| OpenAI API | `openai` | Chave de API (aceita `baseUrl` para endpoints compatíveis) | Experimental (só testes simulados) |
+| Provedor | Id | Autenticação | Limites de uso | Estado |
+| --- | --- | --- | --- | --- |
+| Codex (assinatura ChatGPT) | `codex` | Login por código no navegador (OAuth); o uso entra no plano do ChatGPT | Janelas de 5h e semanal, créditos (ao vivo) | Referência (validado num app real) |
+| Claude API | `anthropic` | Chave de API | Requisições/tokens por minuto (pelos headers da resposta) | Experimental (só testes simulados) |
+| OpenAI API | `openai` | Chave de API (aceita `baseUrl` para endpoints compatíveis) | Requisições/tokens por minuto (pelos headers da resposta) | Experimental (só testes simulados) |
 
 Outros provedores (ex.: Cursor) entram implementando a interface `Provider` e
 passando em `extraProviders` ou `llm.register(...)`.
@@ -97,10 +97,41 @@ llm.codex.cancelLogin(flow.flowId)               // se o usuário fechar a janel
 Os tokens são renovados automaticamente, uma renovação por vez, porque o refresh token
 é rotativo. Se a sessão for revogada, a lib apaga as credenciais e lança `reauth_required`.
 
+## Limites de uso
+
+`llm.usage(id)` devolve quanto de cada limite já foi usado, no mesmo formato para todos os provedores. Assim
+dá para desenhar barras de progresso ou avisar antes de o limite acabar. `llm.usages()` faz isso para todos os
+provedores conectados.
+
+```ts
+import { pacing } from 'llm-connector'
+
+const usage = await llm.usage('codex')
+// { provider: 'codex', source: 'live', plan: 'plus', limitReached: false,
+//   windows: [{ id: 'primary', label: '5h', usedPercent: 42, windowSeconds: 18000, resetsAt: '...' },
+//             { id: 'secondary', label: 'weekly', usedPercent: 7.5, ... }],
+//   credits: { balance: '12.50', hasCredits: true, unlimited: false } }
+
+for (const w of usage?.windows ?? []) {
+  const pace = pacing(w) // { elapsedPercent, delta, pace: 'ahead' | 'on_track' | 'under' } | null
+  console.log(`${w.label}: ${w.usedPercent}% usado`, pace?.pace === 'ahead' ? '(vai acabar antes de renovar)' : '')
+}
+```
+
+De onde vêm os números:
+
+- **Codex**: consulta ao vivo no endpoint de uso do ChatGPT, com a sessão em que você já entrou (sem login extra). O endpoint não é documentado e pode mudar; dá para trocar com `codex: { usageUrl }`.
+- **Claude API / OpenAI API**: essas APIs não têm endpoint de uso para chaves comuns, mas toda resposta traz headers de rate limit. A lib guarda os mais recentes, inclusive de respostas `429`, então `usage()` é `null` até a primeira requisição. O `source` é `'headers'` e as janelas trazem `limit` e `remaining`.
+- **Provedores próprios**: implemente o método opcional `usage()` da interface `Provider`.
+
+`pacing(window)` compara a fatia usada com a fatia de tempo que já passou na janela: `'ahead'` quer dizer que,
+nesse ritmo, o limite acaba antes de renovar. Precisa de `windowSeconds` e `resetsAt`, então devolve `null` para
+os limites que vêm dos headers.
+
 ## API
 
 - `createLLM({ storage, fetch?, userAgent?, codex?, anthropic?, openai?, extraProviders? })`
-- `llm.statuses()` · `llm.listModels(id, { force? })` · `llm.stream(id, req)` · `llm.complete(id, req, onDelta?)`
+- `llm.statuses()` · `llm.usage(id)` · `llm.usages()` · `llm.listModels(id, { force? })` · `llm.stream(id, req)` · `llm.complete(id, req, onDelta?)`
 - `llm.provider(id)` · `llm.register(provider)` · `llm.providers`
 - `req`: `{ model?, messages, system?, maxTokens?, temperature?, signal? }`. O `signal` permite cancelar, por exemplo num botão "Parar".
 - Eventos: `{ type: 'delta', text }` durante o streaming e, no fim, `{ type: 'done', text, usage? }`.
@@ -139,6 +170,11 @@ npm run build
 Projeto independente, **sem afiliação** com OpenAI ou Anthropic. O login do Codex segue o fluxo do Codex CLI,
 que é interno da OpenAI e pode mudar ou deixar de funcionar a qualquer momento. Use por sua conta e risco e
 respeite os termos de uso de cada serviço.
+
+## Créditos
+
+O mapeamento de limites do Codex e a ideia de ritmo (`pacing`) vêm do [ai-usagebar](https://github.com/akitaonrails/ai-usagebar),
+do Fabio Akita (MIT), um app de barra de status que acompanha os limites de uso de IA em vários provedores.
 
 ## Contribuindo
 

@@ -1,5 +1,6 @@
 import { errorFromResponse, parseJsonSafe, readJson, send, sseEvents, type ProviderOptions } from '../http.js'
-import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest, type Usage } from '../types.js'
+import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest, type Usage, type UsageSnapshot } from '../types.js'
+import { parseAnthropicRateLimits } from '../usage.js'
 import { ApiKeyProviderBase } from './api-key.js'
 
 const API_VERSION = '2023-06-01'
@@ -26,6 +27,10 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
     super(options, 'https://api.anthropic.com', 'anthropic')
     this.fallbackModel = options.fallbackModel ?? FALLBACK_MODEL
     this.defaultMaxTokens = options.defaultMaxTokens ?? 4096
+  }
+
+  protected parseRateLimits(headers: Headers): UsageSnapshot | null {
+    return parseAnthropicRateLimits(headers)
   }
 
   private headers(apiKey: string): Record<string, string> {
@@ -91,6 +96,7 @@ export class AnthropicProvider extends ApiKeyProviderBase implements Provider {
       { method: 'POST', headers: { ...this.headers(apiKey), 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body), signal: request.signal, timeout: 300_000 },
       'Could not reach Anthropic.',
     )
+    this.recordRateLimits(response)
     if (!response.ok) throw await errorFromResponse(response, 'Anthropic')
 
     let text = ''

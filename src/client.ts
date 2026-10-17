@@ -3,7 +3,7 @@ import { AnthropicProvider, type AnthropicOptions } from './providers/anthropic.
 import { CodexProvider, type CodexOptions } from './providers/codex.js'
 import { OpenAIProvider, type OpenAIOptions } from './providers/openai.js'
 import type { CredentialStorage } from './storage/types.js'
-import { LLMError, type ConnectionStatus, type ModelCatalog, type Provider, type ProviderId, type StreamEvent, type StreamRequest } from './types.js'
+import { LLMError, type ConnectionStatus, type ModelCatalog, type Provider, type ProviderId, type StreamEvent, type StreamRequest, type UsageSnapshot } from './types.js'
 
 export interface CreateLLMOptions {
   /** Where tokens/keys are stored (see `createSafeStorageStorage`, `createEncryptedFileStorage`). */
@@ -29,6 +29,10 @@ export interface LLM {
   /** Connection status of every provider, keyed by id. */
   statuses(): Promise<Record<ProviderId, ConnectionStatus>>
   listModels(id: ProviderId, options?: { force?: boolean }): Promise<ModelCatalog>
+  /** Usage limits for one provider; null when unknown or unsupported. */
+  usage(id: ProviderId): Promise<UsageSnapshot | null>
+  /** Usage limits of every connected provider, by id. Failures map to null. */
+  usages(): Promise<Record<ProviderId, UsageSnapshot | null>>
   /** Streaming: `for await (const ev of llm.stream('codex', {...}))`. */
   stream(id: ProviderId, request: StreamRequest): AsyncGenerator<StreamEvent>
   /** Full text response. `onDelta` receives each chunk. */
@@ -65,6 +69,19 @@ export function createLLM(options: CreateLLMOptions): LLM {
       return Object.fromEntries(entries)
     },
     listModels: (id, opts) => get(id).listModels(opts),
+    async usage(id) {
+      const provider = get(id)
+      return provider.usage ? provider.usage() : null
+    },
+    async usages() {
+      const entries = await Promise.all(
+        [...registry.values()].map(async (p) => {
+          if (!p.usage || !(await p.status()).connected) return [p.id, null] as const
+          return [p.id, await p.usage().catch(() => null)] as const
+        }),
+      )
+      return Object.fromEntries(entries)
+    },
     stream: (id, request) => get(id).stream(request) as AsyncGenerator<StreamEvent>,
     async complete(id, request, onDelta) {
       let text = ''

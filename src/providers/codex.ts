@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { DEFAULT_USER_AGENT, errorFromResponse, parseJsonSafe, readJson, send, sseEvents, type FetchLike, type ProviderOptions } from '../http.js'
 import type { CredentialStorage } from '../storage/types.js'
-import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest } from '../types.js'
+import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest, type UsageSnapshot } from '../types.js'
+import { parseCodexUsage } from '../usage.js'
 
 /*
  * Sign-in with a ChatGPT/Codex subscription (OAuth device code), the same flow as
@@ -10,6 +11,7 @@ import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, typ
 const ISSUER = 'https://auth.openai.com'
 const DEFAULT_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const DEFAULT_BASE_URL = 'https://chatgpt.com/backend-api/codex'
+const DEFAULT_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage'
 const DEFAULT_MODEL = 'gpt-5-codex'
 const VERIFICATION_URI = `${ISSUER}/codex/device`
 const DEVICE_REDIRECT_URI = `${ISSUER}/deviceauth/callback`
@@ -23,6 +25,8 @@ export interface CodexOptions extends ProviderOptions {
   defaultModel?: string
   /** Version reported to the Codex model catalog. */
   clientVersion?: string
+  /** Endpoint for plan usage limits (undocumented; may change). */
+  usageUrl?: string
 }
 
 interface StoredCodex {
@@ -100,6 +104,7 @@ export class CodexProvider implements Provider {
   private readonly clientId: string
   private readonly defaultModel: string
   private readonly clientVersion: string
+  private readonly usageUrl: string
   private readonly flows = new Map<string, Flow>()
   private refreshing: Promise<StoredCodex> | null = null
   private modelsCache: { accountId: string | null; at: number; value: ModelCatalog } | null = null
@@ -112,6 +117,7 @@ export class CodexProvider implements Provider {
     this.clientId = options.clientId ?? DEFAULT_CLIENT_ID
     this.defaultModel = options.defaultModel ?? DEFAULT_MODEL
     this.clientVersion = options.clientVersion ?? '1.0.0'
+    this.usageUrl = options.usageUrl ?? DEFAULT_USAGE_URL
   }
 
   // ---- storage ------------------------------------------------------------
@@ -300,6 +306,17 @@ export class CodexProvider implements Provider {
     }
     this.modelsCache = { accountId: credentials.accountId, at: Date.now(), value }
     return value
+  }
+
+  // ---- usage limits ------------------------------------------------------
+
+  /** Plan limits (5h and weekly windows, credits) for the signed-in ChatGPT account. */
+  async usage(): Promise<UsageSnapshot> {
+    const credentials = await this.freshCredentials()
+    const response = await send(this.fetchImpl, this.usageUrl, { headers: { ...this.authHeaders(credentials), Accept: 'application/json' }, timeout: 15_000 }, 'Could not reach Codex.')
+    if (response.status === 401) throw new LLMError('Codex rejected the session. Sign in again.', 'reauth_required', 401)
+    if (!response.ok) throw await errorFromResponse(response, 'Codex')
+    return parseCodexUsage(await readJson(response))
   }
 
   // ---- inference -----------------------------------------------------------

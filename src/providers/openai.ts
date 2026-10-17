@@ -1,5 +1,6 @@
 import { errorFromResponse, parseJsonSafe, readJson, send, sseEvents, type ProviderOptions } from '../http.js'
-import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest, type Usage } from '../types.js'
+import { LLMError, type ConnectionStatus, type ModelCatalog, type ModelInfo, type Provider, type StreamEvent, type StreamRequest, type Usage, type UsageSnapshot } from '../types.js'
+import { parseOpenAIRateLimits } from '../usage.js'
 import { ApiKeyProviderBase } from './api-key.js'
 
 const FALLBACK_MODEL = 'gpt-5'
@@ -25,6 +26,10 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
   constructor(options: OpenAIOptions) {
     super(options, 'https://api.openai.com/v1', 'openai')
     this.fallbackModel = options.fallbackModel ?? FALLBACK_MODEL
+  }
+
+  protected parseRateLimits(headers: Headers): UsageSnapshot | null {
+    return parseOpenAIRateLimits(headers)
   }
 
   private headers(apiKey: string): Record<string, string> {
@@ -92,6 +97,7 @@ export class OpenAIProvider extends ApiKeyProviderBase implements Provider {
       { method: 'POST', headers: { ...this.headers(apiKey), 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body), signal: request.signal, timeout: 300_000 },
       'Could not reach OpenAI.',
     )
+    this.recordRateLimits(response)
     if (!response.ok) throw await errorFromResponse(response, 'OpenAI')
 
     let text = ''
